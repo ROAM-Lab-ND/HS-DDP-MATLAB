@@ -1,5 +1,5 @@
-function InitializeBouncingTraj(hybridT)
-folderName = '/home/wensinglab/HL/Code/MHPC-project/MATLAB_v2/Examples/BouncingBall/Data/Nathan/';
+function initializeBouncingTraj(hybridT)
+folderName = '/home/wensinglab/HL/Code/HSDDP/MATLAB/Examples/BouncingBall/Data/Nathan/';
 fileName = 'saltation_matrix_trajectory_1_bounce.mat';
 u_struct = load(strcat(folderName, fileName),'u_trj');
 u = u_struct.u_trj;

@@ -1,5 +1,5 @@
 function compare_hsddp2saltation(hsddp_data)
-folderName = '/home/wensinglab/HL/Code/MHPC-project/MATLAB_v2/Examples/BouncingBall/Data/Nathan/';
+folderName = '/home/wensinglab/HL/Code/HSDDP/MATLAB/Examples/BouncingBall/Data/Nathan/';
 fileName = 'saltation_matrix_trajectory_1_bounce.mat';
 u_struct = load(strcat(folderName, fileName),'u_trj');
 x_struct = load(strcat(folderName, fileName),'x_trj');
