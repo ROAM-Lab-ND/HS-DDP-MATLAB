@@ -116,7 +116,24 @@ classdef HSDDP < handle
             DDP.dV = DDP.hybridT(1).dV;
         end
                 
-                        
+                
+        function reg = backwardsweep_regularization(DDP, reg, options)
+            % backward sweep with regularization
+            success = 0;
+            while ~success
+                if options.Debug
+                    fprintf('\t reg=%.3e\n',reg);
+                end
+                if reg > 1e04
+                    error('Regularization exeeds allowed value')
+                end
+                success = DDP.backwardsweep(reg);
+                if success
+                    break;
+                end
+                reg = max(reg*options.beta_reg, 1e-3);
+            end
+        end
         function [xopt, uopt, Kopt, Info] = solve(DDP, options)
             Info.ou_iters = 0;
             Info.in_iters = [];
@@ -167,21 +184,7 @@ classdef HSDDP < handle
                         fprintf('\t Inner loop Iteration %3d\n',in_iter);
                     end                                        
                     
-                    % backward sweep with regularization
-                    success = 0;
-                    while ~success
-                        if options.Debug
-                            fprintf('\t reg=%.3e\n',regularization);
-                        end
-                        if regularization > 1e04
-                            error('Regularization exeeds allowed value')
-                        end
-                        success = DDP.backwardsweep(regularization);
-                        if success
-                            break;
-                        end
-                        regularization = max(regularization*options.beta_reg, 1e-3);
-                    end
+                    regularization = DDP.backwardsweep_regularization(regularization, options); 
                     % reduce regularization term
                     regularization = regularization/20;
                     if regularization < 1e-6
@@ -203,6 +206,11 @@ classdef HSDDP < handle
                 end
                 fprintf('Maximum terminal constraint violation %.4f\n',DDP.maxViolation);
                 if (ou_iter>=options.max_AL_iter) || (DDP.maxViolation < options.AL_thresh)
+                    if options.one_more_sweep
+                        DDP.mod_AL_params_last_backsweep();
+                        DDP.forwardsweep(1,options);
+                        DDP.backwardsweep_regularization(regularization, options);
+                    end
                     break;
                 end
                 ou_iter = ou_iter + 1;
@@ -274,6 +282,14 @@ classdef HSDDP < handle
                     end
                 end
             end
-        end        
+        end       
+        function mod_AL_params_last_backsweep(DDP)
+           % set all penalty to zero but keep the Lagrangian multiplier unchanged 
+           for i = 1:DDP.n_phases
+               for j = 1:length(DDP.phases(i).AL_params)
+                   DDP.phases(i).AL_params(j).sigma = 0;
+               end
+           end
+        end
     end           
 end
