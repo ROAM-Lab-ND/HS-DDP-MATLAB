@@ -116,7 +116,23 @@ classdef HSDDP < handle
             DDP.dV = DDP.hybridT(1).dV;
         end
                 
-                        
+        function reg = backwardsweep_w_reg(DDP, reg, options)
+            success = 0;
+            while ~success
+                if options.Debug
+                    fprintf('\t reg=%.3e\n',reg);
+                end
+                if reg> 1e04
+                    error('Regularization exeeds allowed value')
+                end
+                success = DDP.backwardsweep(reg);
+                if success
+                    break;
+                end
+                reg= max(reg*options.beta_reg, 1e-3);
+            end
+        end
+        
         function [xopt, uopt, Kopt, Info] = solve(DDP, options)
             Info.ou_iters = 0;
             Info.in_iters = [];
@@ -127,9 +143,10 @@ classdef HSDDP < handle
             uopt = cell(1,DDP.n_phases);
             Kopt = cell(1,DDP.n_phases);            
             DDP.initialize_params();           
-            ou_iter = 1;     
+            ou_iter = 0;     
             pconstraint_active = options.pconstraint_active;
             while 1 % Implement AL and ReB in outer loop
+                ou_iter = ou_iter + 1;
                 if  options.Debug
                     fprintf('====================================================\n');
                     fprintf('\t Outer loop Iteration %3d\n',ou_iter);
@@ -160,28 +177,17 @@ classdef HSDDP < handle
                 
                 Vprev = DDP.V;
                 regularization = 0;       
-                in_iter = 1;
+                in_iter = 0;
                 while 1 % DDP in inner loop
+                    in_iter = in_iter + 1;
                     if  options.Debug
                         fprintf('================================================\n');
                         fprintf('\t Inner loop Iteration %3d\n',in_iter);
                     end                                        
                     
                     % backward sweep with regularization
-                    success = 0;
-                    while ~success
-                        if options.Debug
-                            fprintf('\t reg=%.3e\n',regularization);
-                        end
-                        if regularization > 1e04
-                            error('Regularization exeeds allowed value')
-                        end
-                        success = DDP.backwardsweep(regularization);
-                        if success
-                            break;
-                        end
-                        regularization = max(regularization*options.beta_reg, 1e-3);
-                    end
+                    regularization = DDP.backwardsweep_w_reg(regularization, options);
+                    
                     % reduce regularization term
                     regularization = regularization/20;
                     if regularization < 1e-6
@@ -198,11 +204,15 @@ classdef HSDDP < handle
                         Info.max_violations(end+1) = DDP.maxViolation;
                         break
                     end
-                    in_iter = in_iter + 1;     
                     Vprev = DDP.V;                    
                 end
                 fprintf('Maximum terminal constraint violation %.4f\n',DDP.maxViolation);
                 if (ou_iter>=options.max_AL_iter) || (DDP.maxViolation < options.AL_thresh)
+                    if options.one_more_sweep
+                        DDP.mod_al_params_last_sweep();
+                        DDP.forwardsweep(1, options);
+                        DDP.backwardsweep_w_reg(regularization, options);
+                    end
                     break;
                 end
                 ou_iter = ou_iter + 1;
@@ -275,5 +285,12 @@ classdef HSDDP < handle
                 end
             end
         end        
+        function mod_al_params_last_sweep(DDP)
+            for i = 1:DDP.n_phases
+               for j = 1:length(DDP.phases(i).AL_params)
+                   DDP.phases(i).AL_params(j).sigma = 0;
+               end
+           end
+        end
     end           
 end
