@@ -144,14 +144,14 @@ classdef HSDDP < handle
             uopt = cell(1,DDP.n_phases);
             Kopt = cell(1,DDP.n_phases);            
             DDP.initialize_params();           
-            ou_iter = 1;     
+            ou_iter = 0;     
             pconstraint_active = options.pconstraint_active;
             while 1 % Implement AL and ReB in outer loop
+                ou_iter = ou_iter + 1;
                 if  options.Debug
                     fprintf('====================================================\n');
                     fprintf('\t Outer loop Iteration %3d\n',ou_iter);
-                end
-                
+                end                
                 % Initial sweep 
                 if pconstraint_active
                     if ((DDP.maxViolation > 0.05) || (ou_iter == 1))
@@ -213,7 +213,6 @@ classdef HSDDP < handle
                     end
                     break;
                 end
-                ou_iter = ou_iter + 1;
                 DDP.update_ReB_params(options);                
                 DDP.update_AL_params(options);
             end
