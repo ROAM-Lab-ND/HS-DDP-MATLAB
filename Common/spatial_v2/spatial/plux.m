@@ -18,6 +18,6 @@ if nargin == 2				% E,r --> X
 else					% X --> E,r
 
   o1 = i1(1:3,1:3);
-  o2 = -skew(o1'*i1(4:6,1:3));
+  o2 = -skew2(o1'*i1(4:6,1:3));
 
 end
