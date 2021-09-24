@@ -55,5 +55,9 @@ classdef Trajectory < handle
             T.Ubar = T.U;
             T.dU     = repmat({zeros(size(T.dU{1}))}, 1, length(T.dU));
         end
+
+        function append(T, Traj)
+            % Researved for implementation
+        end
     end
 end
