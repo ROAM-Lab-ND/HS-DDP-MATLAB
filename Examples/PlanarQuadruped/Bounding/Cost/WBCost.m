@@ -1,12 +1,10 @@
 classdef WBCost < handle
     properties
        dt
-       ref
        Q
        R
        S
        Qf
-       r
     end
     
     methods % constructor

@@ -27,7 +27,7 @@ options.feedback_active  = 1;
 options.smooth_active    = 0;          % Smoothness active
 options.parCalc_active   = 1;          % compute cost and dynamics partials in forward sweep (default)
 options.Debug            = 1;          % Debug active
-
+options.one_more_sweep   = 0;
 %% Build Hybrid trajectory optimization problem
 % Set initial condition
 q0 = [0,-0.1093,-0.1542 1.0957 -2.2033 0.9742 -1.7098]';
