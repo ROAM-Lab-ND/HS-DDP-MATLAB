@@ -15,11 +15,11 @@ q = [pos; rpy; qa];
 qd = [vel; rpyrate; qa_d];
 
 %% Generate Jacobian Derative funtion objects
-footIdx = params.footIdx;
+footIds = params.footIds;
 kneeLinkLength = params.kneeLinkLength;
 J = cell(1,4);
 for foot = 1:4
-    J{foot} = compute_Jacobian(robot, q, footIdx(foot), [0, 0, -kneeLinkLength]');
+    J{foot} = compute_Jacobian(robot, q, footIds(foot), [0, 0, -kneeLinkLength]');
 end
 
 %%
