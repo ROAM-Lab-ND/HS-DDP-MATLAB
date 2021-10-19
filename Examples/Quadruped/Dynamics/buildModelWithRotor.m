@@ -1,4 +1,4 @@
-function robot = buildModel(params)
+function robot = buildModelWithRotor(params)
 % This function creates a full planar paramsruped model structure
 % The 0-configuration is with legs straight down, cheetah
 % pointed along the +x axis of the ICS.
@@ -8,7 +8,7 @@ function robot = buildModel(params)
 
 %% Fixed-base model
 % We first creat a fixed-base model
-robot.NB = 13;                                 % number of bodies (including feet)
+robot.NB = 13;                                 % number of bodies 
 robot.parent  = zeros(1,robot.NB);             % parent body indices
 robot.Xtree   = repmat({eye(6)},robot.NB,1)';   % coordinate transforms
 robot.jtype   = repmat({'  '},robot.NB,1)';     % joint types
@@ -22,6 +22,14 @@ robot.Xtree{nbase} = eye(6);
 robot.jtype{nbase} = ' '; % is not needed since floating-base model would not use
 robot.I{nbase} =  mcI(params.bodyMass, params.bodyCoM, params.bodyRotInertia);
 
+% rotor information
+robot.Xrotor = repmat({eye(6)}, robot.NB, 1)';
+robot.jtype_rotor = repmat({' '}, robot.NB, 1)';
+robot.has_rotor = zeros(1, robot.NB);
+robot.gr = repmat({1}, robot.NB, 1)';  % gear ratio
+robot.I_rotor = repmat({zeros(6)}, robot.NB,1)';
+
+% append legs
 NLEGS = 4;
 nb = nbase;
 for i = 1:NLEGS
@@ -36,6 +44,16 @@ for i = 1:NLEGS
     else
         robot.I{nb} = Iabad;
     end
+    robot.Xrotor{nb} = plux(eye(3), params.abadRotorLoc{i});
+    robot.jtype_rotor{nb} = 'Rx';
+    robot.has_rotor(nb) = 1;    
+    robot.gr{nb} = params.abadGearRatio;
+    Iabad_rotor = mcI(params.rotorMass, flip_sign_abad(params.rotorCoM, i), params.rotorRotInertiaX);
+    if (-1)^i < 0
+        robot.I_rotor{nb} = flipAlongAxis(Iabad_rotor,'y');
+    else
+        robot.I_rotor{nb} = Iabad_rotor;
+    end
         
     % Hip link
     nb = nb + 1;
@@ -43,6 +61,11 @@ for i = 1:NLEGS
     robot.Xtree{nb} = plux(rz(pi), params.hipLoc{i});  
     robot.jtype{nb} = 'Ry';
     robot.I{nb} = mcI(params.hipLinkMass, params.hipLinkCoM, params.hipRotInertia);
+    robot.Xrotor{nb} = plux(rz(pi), params.hipRotorLoc{i});
+    robot.jtype_rotor{nb} = 'Ry';
+    robot.has_rotor(nb) = 1;
+    robot.gr{nb} = params.hipGearRatio;
+    robot.I_rotor{nb} = mcI(params.rotorMass, params.rotorCoM, params.rotorRotInertiaY);
     
     % Knee link
     nb = nb + 1;
@@ -50,12 +73,20 @@ for i = 1:NLEGS
     robot.Xtree{nb} = plux(eye(3), params.kneeLoc);    % translation (length of hip link)
     kneeRotInertia = ry(pi/2) * params.kneeRotInertia * ry(pi/2)'; % transform the Inertia matrix into body frame. ry is from Featherstone's definition of rotation matrix
     robot.jtype{nb} = 'Ry';
-    robot.I{nb} = mcI(params.kneeLinkMass, params.kneeLinkCoM, kneeRotInertia);    
+    robot.I{nb} = mcI(params.kneeLinkMass, params.kneeLinkCoM, kneeRotInertia);
+    robot.Xrotor{nb} = plux(eye(3), params.kneeRotorLoc);
+    robot.jtype_rotor{nb} = 'Ry';
+    robot.has_rotor(nb) = 1;    
+    robot.gr{nb} = params.kneeGearRatio;
+    robot.I_rotor{nb} = mcI(params.rotorMass, params.rotorCoM, params.rotorRotInertiaY);
 end
-
-%% Make it a floating-base model
+% create floating base
 robot = floatbase(robot);
+% Modify the floting base link for motor information
+robot.has_rotor = [zeros(1,5), robot.has_rotor];
+robot.gr = [repmat({1}, 1, 5), robot.gr];
+robot.jtype_rotor = [repmat({' '}, 1, 5), robot.jtype_rotor];
+robot.Xrotor = [repmat({eye(6)},1,5), robot.Xrotor];
+robot.I_rotor = [repmat({zeros(6)},1,5), robot.I_rotor];
 end
-
-
 

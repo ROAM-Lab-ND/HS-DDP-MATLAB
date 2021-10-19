@@ -34,7 +34,7 @@ robot = struct(...
         'linkwidth', 0.03,...
         'footIds', [9, 12, 15, 18]);
     
-    robot.rotorRotInertiaY = ry(pi/2)*robot.rotorRotInertiaZ*ry(pi/2)';
+    robot.rotorRotInertiaY = ry(pi/2)*robot.rotorRotInertiaZ*ry(pi/2)'; % ry uses Featherstones's convention for rotation matrices
     robot.rotorRotInertiaX = rx(pi/2)*robot.rotorRotInertiaZ*rx(pi/2)';
     
     robot.abadLoc{1} = [robot.bodyLength, -robot.bodyWidth, 0]'/2;     % FR
