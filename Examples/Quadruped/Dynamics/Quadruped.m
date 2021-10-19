@@ -4,83 +4,120 @@ classdef Quadruped < AbstractRobot
         e = 0  % elastic coefficient  
         model
         params
-        footIdx
+        footIds
         qs = 18
         xs = 36
         us = 12
         ys = 12
+        DAE_reg_method 
     end
     
     properties
         dynamics_par_handle
-        jacob_dot_handle
+        footJacob_dot_handle
         resetmap_par_handle
     end
                   
     methods % constructor
-        function robot = Quadruped(dt)
+        function robot = Quadruped(dt,varargin)
             robot.dt = dt;
             robot.params = getMiniCheetahParams();
-            robot.model = buildModel(robot.params);
-            robot.footIds = robot.params.footIds;  % index of foot in the kinematic tree  
-            robot.dynamics_par_handle = DynamicsSupport();
+            has_motor = 0;
+            robot.DAE_reg_method = "none";
+
+            if nargin >= 1+1
+                has_motor = varargin{1};
+            end
+            if nargin >= 1+2
+                robot.DAE_reg_method = varargin{2};
+            end
+            if has_motor
+                robot.model = buildModelWithRotor(robot.params);
+            else
+                robot.model = buildModel(robot.params);
+            end            
+            robot.footIds = robot.params.footIds;  % index of foot in the kinematic tree              
+        end
+
+        function gen_function_handles(robot)
+%             robot.dynamics_par_handle = DynamicsSupport();
             robot.footJacob_dot_handle = JacobianSupport();
-            robot.resetmap_par_handle = ResetmapSupport();
+%             robot.resetmap_par_handle = ResetmapSupport();
         end
     end    
         
     methods
-        function [qdd, y] = dynamics_rpy_cont(robot, x, u, ctact_status)
+        function [qdd, y, varargout] = dynamics_rpy_cont(robot, x, u, ctact_status)
             % compute continuous-time dynanmics which use rpy for
             % orientation
             % input x: x = [q; qd] where q is generalized coordinate
             %       ctact: contact status 1x4 vector, [FR, FL, RR, RL]
             % return qdd: second derivative of generalized joints
             %        y: ground reaction force of all feet (zero for swing leg)
-            
+        
             q = x(1:robot.qs, 1);
             qd = x(robot.qs+1:end, 1);
             ctact_foot = find(ctact_status == 1); % index of foot in contact
             y = zeros(robot.ys, 1);
             
             % Collect Jacobians and Jacobian derivatives of all feet
-            for foot = 1:4
-                J{foot} = compute_Jacobian(robot.model, q, robot.footIds(foot), [0,0,-robot.params.kneeLinkLength]);
-                Jd{foot} = robot.footJacob_dot_handle{foot}(q, qd);
+            J = cell(1,4);
+            Jd = cell(1,4);
+            [Jd{1}, Jd{2}, Jd{3}, Jd{4}] =  robot.footJacob_dot_handle(q, qd);
+            for leg = 1:4
+                J{leg} = compute_foot_jacobian(robot.model, q, robot.params.kneeLinkLength, leg);
             end
             
             [H, C] = HandC(robot.model, q, qd);
             
             % Construct KKT contact dynamics
-            Jc = [J{ctact_foot}];
-            Jcd = [Jd{ctact_foot}];
+            Jc = [];
+            Jcd = [];
+            for foot = ctact_foot
+                Jc = [Jc; J{foot}];
+                Jcd = [Jcd; Jd{foot}];             
+            end          
             S = [zeros(6,12); eye(12)]; % control selection
             if isempty(Jc)
                 K = H;
                 b = S*u - C;
             else
+                alpha = 0;
+                if robot.DAE_reg_method == "baumgart"
+                    alpha = 8;
+                end
                 K = [H, -Jc';Jc, zeros(size(Jc,1),size(Jc,1))];
-                b = [S*u - C; -Jcd*qd];
+                b = [S*u - C; -Jcd*qd - alpha*Jc*qd];   % simplified baumgart stabilization when alpha > 0           
             end
             f_KKT = K\b;
-            qdd = f_KKT(1:robot.model.NB);
-            lambda = f_KKT(robot.mode.NB+1:end);            
+            qdd = sparse(f_KKT(1:robot.model.NB));
+            lambda = f_KKT(robot.model.NB+1:end); 
+            i = 1;
             for foot = ctact_foot
-                y(3*(foot-1)+1:3*foot) = lambda(1:3);
-                lambda(1:3) = [];
+                y(3*(foot-1)+1:3*foot) = full(lambda(3*(i-1)+1:3*i));
+                i = i +1;
+            end
+            if nargout >= 2+1
+                varargout{1} = Jc;                
+            end
+            if nargout >= 2+2
+                varargout{2} = Jcd;
             end
         end
-        
-        function [qdd, y] = dynamics_SE3_cont(robot, ws, u, ctact)
-            % Reserved for future implementation of quaternion dynamics
-        end        
+                  
         
         function [x_next, y] = dynamics_rpy(robot, x, u, ctact)
             % Compute discrete-time dynamics where rpy used for orientation   
             qd = x(robot.qs+1:end);
-            [qdd, y] = robot.dynamics_rpy_cont(x, u, ctact);         
-            x_next =  x + [qd * robot.dt;
-                           qdd * robot.dt];
+            [qdd, y, Jc, Jcd] = robot.dynamics_rpy_cont(x, u, ctact);  
+            x_delta = [qd * robot.dt;
+                       qdd * robot.dt];  
+            if (robot.DAE_reg_method == "projection") && (~isempty(Jc))
+                P = [Jc, zeros(size(Jc)); Jcd, Jc];
+                N = null(full(P));
+                x_delta = N*N'*x_delta; % project the state increment onto the constraint manifold
+            end                         
+            x_next =  x + x_delta;
            
         end
         
@@ -93,16 +130,19 @@ classdef Quadruped < AbstractRobot
             % next time steps
             % Input ws: whole-body state            
             %       ctact: contact status 1x4 vector at curent time step, [FR, FL, RR, RL]
-            %       ctact_n: contact status at next time step            
+            %       ctact_n: contact status at next time step    
+            
             q = x(1:robot.qs, 1);
             qd = x(robot.qs+1:end, 1);
             y = zeros(12, 1);
             
             [q_next, qd_next, lambda] = quadruped_impact_dynamics(robot.model, robot.params, q, qd, impt_foot);            
-            x_next = [q_next; qd_next];
-            for foot = impt_foot
-                y(3*(foot-1):3*foot, 1) = lambda(1:3);
-                lambda(1:3) = [];
+            x_next = sparse([q_next; qd_next]);
+            for foot = 1:length(impt_foot)
+                if impt_foot(foot)
+                    y(3*(foot-1)+1:3*foot, 1) = lambda(1:3);
+                    lambda(1:3) = [];
+                end                
             end
         end                
     end    
