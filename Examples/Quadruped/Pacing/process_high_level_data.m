@@ -17,7 +17,7 @@ q_array = readmatrix('generalized_joint.txt');
 qd_array = readmatrix('generalized_vel.txt');
 state_array = [q_array, qd_array];
 
-% Count the number of phases and separate the phases
+%% Separate the phases based on contact status
 len_horizon = size(ctact_array, 1);
 dt = time_array(2) - time_array(1);
 ctactSeq = cell(1, 100);
@@ -47,14 +47,34 @@ jend(n+1:end) = [];
 
 hybridRef = cell(1, n-1);
 for i = 1:n-1
-    r = TrajReference(36, 12, 12, jend(i)-jstart(i)+1);
-    r.xd = state_array(jstart(i):jend(i), :)';
-    r.ud = torque_array(jstart(i):jend(i), :)';
+    len_horizon = jend(i)-jstart(i)+1;
+    r = TrajReference(36, 12, 12, len_horizon);
+    r.xd = mat2cell(state_array(jstart(i):jend(i), :)', 36, ones(1,len_horizon));
+    r.ud = mat2cell(torque_array(jstart(i):jend(i), :)', 12, ones(1,len_horizon));
     hybridRef{i} = r;
 end
-plot_phase_duration(hybridRef);
+
+% Append the end of last phase to the begining of current phase
+for i = 2:length(hybridRef)
+    hybridRef{i}.xd = [hybridRef{i-1}.xd{end}, hybridRef{i}.xd];
+    hybridRef{i}.ud = [hybridRef{i-1}.ud{end}, hybridRef{i}.ud];
+    hybridRef{i}.yd = [hybridRef{i-1}.yd{end}, hybridRef{i}.yd];
+    hybridRef{i}.len = hybridRef{i}.len + 1;
+end
+
+%% Filter out short contact
 [hybridRef, ctactSeq] = filter_short_contact(hybridRef, ctactSeq);
-plot_phase_duration(hybridRef);
+% plot_phase_duration(hybridRef);
+
+%% Flip hip and knee rotations
+for i=1:length(hybridRef)
+    hybridRef{i} = flip_signs_for_MC(hybridRef{i});
+end
+
+%% Refine the trajectory such that time step is 0.001 s
+% hybridRef = refine_trajectory(hybridRef);
+% dt = 0.001;
+
 end
 
 function [hybridT_new, ctactSeq_new] = filter_short_contact(hybridT, ctactSeq)
@@ -86,4 +106,29 @@ figure
 plot(1:n, len_horizons);
 xlabel('phase index');
 ylabel('phase horizon');
+end
+
+function hybrid_fine = refine_trajectory(hybridR)
+% Refine the trajectory so that the time step is 0.001 s
+hybrid_fine = cell(1, length(hybridR));
+for i = 1:length(hybrid_fine)
+    duration = (hybridR{i}.len-1) * 0.033;
+    len_horizon = int16(duration/0.001) + 1;
+    hybrid_fine{i} = TrajReference(36, 12, 12, len_horizon);
+    k = 1;
+    for j = 1:hybridR{i}.len-1
+        hybrid_fine{i}.ud(k:k + 32) =  repmat({hybridR{i}.ud{j}/33},1,33);
+        x_seg = interpolate_vector(hybridR{i}.xd{j}, hybridR{i}.xd{j+1}, 34);
+        hybrid_fine{i}.xd(k:k+33) = mat2cell(x_seg, 36, ones(1,34));
+        k = k + 33;
+    end     
+end
+end
+
+function X = interpolate_vector(x1, x2, n)
+m = length(x1(:));
+X = zeros(m, n);
+for i = 1:m
+    X(i, :) = linspace(x1(i), x2(i), n);
+end
 end
