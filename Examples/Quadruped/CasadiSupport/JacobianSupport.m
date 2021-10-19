@@ -17,12 +17,11 @@ qd = [vel; rpyrate; qa_d];
 
 
 %% Generate Jacobian Derative funtion objects
-footIds = params.footIds;
 kneeLinkLength = params.kneeLinkLength;
 J = cell(1,4);
 Jd = cell(1,4);
 for foot = 1:4
-    J{foot} = compute_Jacobian(robot, q, footIds(foot), [0, 0, -kneeLinkLength]');
+    J{foot} = compute_foot_jacobian(robot, q, kneeLinkLength, foot);
     Jd{foot} = reshape(jacobian(reshape(J{foot}, [numel(J{foot}),1]),q)*qd, 3, robot.NB);
 end
 footJacobDer = Function('footJacobDerivative', {q, qd}, Jd);
