@@ -37,17 +37,18 @@ for i = 1:15
     % Construct KKT contact dynamics
     Jc = [];
     Jcd = [];
-    for c = 1:length(cfoot_idx)
-        Jc = [Jc; J{cfoot_idx(c)}];
-        Jcd = [Jcd; Jd{cfoot_idx(c)}];
+    for foot = cfoot_idx
+        Jc = [Jc; J{foot}];
+        Jcd = [Jcd; Jd{foot}];
     end
     
     if isempty(Jc)
         K = H;
         b = S*u - C;
     else
+        alpha = 8;
         K = [H, -Jc';Jc, zeros(size(Jc,1),size(Jc,1))];
-        b = [S*u - C; -Jcd*qd];
+        b = [S*u - C; -Jcd*qd - alpha*Jc*qd];
     end
     f_KKT = K\b;
     qdd = f_KKT(1:robot.NB, 1);
