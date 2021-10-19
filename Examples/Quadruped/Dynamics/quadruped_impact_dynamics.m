@@ -10,11 +10,11 @@ function [q_next, qd_next, lambda] = quadruped_impact_dynamics(robot, params, q,
 % of impact foot
 
 % Generate Jacobian Derative funtion objects
-footIdx = params.footIdx;
+footIds = params.footIds;
 kneeLinkLength = params.kneeLinkLength;
 J = cell(1,4);
 for foot = 1:4
-    J{foot} = compute_Jacobian(robot, q, footIdx(foot), [0, 0, -kneeLinkLength]');
+    J{foot} = compute_Jacobian(robot, q, footIds(foot), [0, 0, -kneeLinkLength]');
 end
 
 % Compute mass matrix and Coriollis term assuming no
@@ -24,8 +24,10 @@ end
 
 % Construct KKT Impact dynamics
 Jc = [];
-for foot = imp_foot
-    Jc = [Jc; J{foot}];
+for foot = 1:length(imp_foot)
+    if imp_foot(foot)
+        Jc = [Jc; J{foot}];
+    end    
 end
 if isempty(Jc)
     K = H;
