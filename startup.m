@@ -1,1 +1,1 @@
-addpath(genpath ('/home/wensinglab/HL/Code/HSDDP/MATLAB'));
+addpath(genpath ('./'));
